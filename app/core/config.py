@@ -36,5 +36,7 @@ class Settings(BaseSettings):
     ENABLE_TIKTOK: bool = False
     ENABLE_YOUTUBE: bool = False
 
+    FRONTEND_URL: str = "http://localhost:3000"
+
 
 settings = Settings()
