@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -37,6 +38,13 @@ class Settings(BaseSettings):
     ENABLE_YOUTUBE: bool = False
 
     FRONTEND_URL: str = "http://localhost:3000"
+
+    @field_validator("DATABASE_URL", "REDIS_URL", "S3_ENDPOINT_URL", "S3_PUBLIC_BASE_URL", mode="before")
+    @classmethod
+    def _strip_quotes(cls, value: str) -> str:
+        if isinstance(value, str):
+            return value.strip().strip('"').strip("'")
+        return value
 
 
 settings = Settings()
