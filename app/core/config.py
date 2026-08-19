@@ -42,9 +42,14 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", "REDIS_URL", "S3_ENDPOINT_URL", "S3_PUBLIC_BASE_URL", mode="before")
     @classmethod
     def _strip_quotes(cls, value: str) -> str:
-        if isinstance(value, str):
-            return value.strip().strip('"').strip("'")
-        return value
+        if not isinstance(value, str):
+            return value
+        value = value.strip()
+        for prefix in ("DATABASE_URL=", "REDIS_URL=", "S3_ENDPOINT_URL=", "S3_PUBLIC_BASE_URL="):
+            if value.startswith(prefix):
+                value = value[len(prefix):]
+                break
+        return value.strip().strip('"').strip("'")
 
 
 settings = Settings()
