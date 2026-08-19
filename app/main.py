@@ -10,8 +10,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        # Ajoute ici l'URL de production une fois le frontend déployé,
-        # ex: "https://app.vayonis.site"
+        "https://app.vayonis.site",
+        "https://vayonis-frontend.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
