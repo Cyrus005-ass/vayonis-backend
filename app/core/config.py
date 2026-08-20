@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     ENABLE_YOUTUBE: bool = False
 
     FRONTEND_URL: str = "http://localhost:3000"
+    INTERNAL_CRON_SECRET: str = ""
 
     @field_validator("DATABASE_URL", "REDIS_URL", "S3_ENDPOINT_URL", "S3_PUBLIC_BASE_URL", mode="before")
     @classmethod
