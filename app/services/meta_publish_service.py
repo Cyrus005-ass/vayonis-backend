@@ -17,6 +17,7 @@ Multi-media (carousel-style) Facebook posts are not yet supported here;
 only the first media item is used if several are attached.
 """
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 
@@ -185,16 +186,9 @@ async def _wait_for_reel_ready(
         if video_status == "error":
             raise MetaPublishError(f"Meta failed processing Reel {video_id}")
 
-        import asyncio
-
         await asyncio.sleep(REEL_POLL_INTERVAL_SECONDS)
 
     raise MetaPublishError(f"Reel {video_id} timed out while processing")
-
-
-def _upsert_social_account_unused() -> None:
-    # placeholder to keep diff minimal - no-op
-    return None
 
 
 async def publish_post_target(

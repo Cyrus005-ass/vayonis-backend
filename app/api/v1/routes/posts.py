@@ -1,7 +1,6 @@
 import asyncio
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from datetime import datetime, UTC
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -164,20 +163,72 @@ async def publish_post_target(
         ) from exc
 
 
+@router.get("/{post_id}")
+def get_post(
+    post_id: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Fetch a post and its targets - used by the frontend to poll for the
+    final publish result after a background publish was kicked off."""
+    post = (
+        db.query(Post)
+        .filter(Post.id == post_id, Post.user_id == current_user.id)
+        .first()
+    )
+    if post is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+
+    targets = db.query(PostTarget).filter(PostTarget.post_id == post.id).all()
+
+    return {
+        "id": str(post.id),
+        "caption": post.caption,
+        "content_type": post.content_type,
+        "scheduled_at": post.scheduled_at,
+        "status": post.status,
+        "created_at": post.created_at,
+        "updated_at": post.updated_at,
+        "targets": [
+            {
+                "id": str(t.id),
+                "post_id": str(t.post_id),
+                "social_account_id": str(t.social_account_id),
+                "platform": t.platform,
+                "status": t.status,
+                "external_post_id": t.external_post_id,
+                "error_message": t.error_message,
+                "published_at": t.published_at,
+                "created_at": t.created_at,
+                "updated_at": t.updated_at,
+            }
+            for t in targets
+        ],
+    }
+
+
 @router.post(
     "/{post_id}/publish",
     response_model=list[PostTargetResponse],
 )
 async def publish_post(
     post_id: str,
+    background_tasks: BackgroundTasks,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[PostTarget]:
-    """Publish a post to ALL of its targets simultaneously (Facebook, Instagram, LinkedIn, ...).
+    """Kick off publishing a post to ALL of its targets in the background.
 
-    Each target is published independently: a failure on one platform does
-    not block the others. Every target's final status/error is returned so
-    the caller can see exactly what happened on each platform.
+    Publishing a video/Reel can take 1-3 minutes (Meta processes it
+    asynchronously), which is longer than most hosting platforms' HTTP
+    request timeout (Render's free tier included). Instead of holding the
+    request open the whole time - which gets silently killed mid-flight
+    with no error ever reaching the client - this endpoint marks every
+    target as "processing" and returns immediately. The actual publishing
+    runs as a FastAPI background task, which keeps running after the
+    response is sent (untied from the client's connection).
+
+    The frontend polls GET /posts/{post_id} to see the final status.
     """
     post = (
         db.query(Post)
@@ -194,19 +245,28 @@ async def publish_post(
             detail="Post has no targets to publish to",
         )
 
-    async def _publish_one(target: PostTarget) -> PostTarget:
-        try:
-            return await publish_dispatcher.publish_target(db, target)
-        except Exception as exc:  # noqa: BLE001
-            target.status = "failed"
-            target.error_message = str(exc)
-            db.commit()
-            db.refresh(target)
-            return target
-
-    results = await asyncio.gather(*(_publish_one(target) for target in targets))
-
-    post.status = "published" if all(t.status == "published" for t in results) else "partially_failed"
+    for target in targets:
+        target.status = "processing"
+        target.error_message = None
     db.commit()
+    for target in targets:
+        db.refresh(target)
 
-    return list(results)
+    async def _publish_all() -> None:
+        async def _publish_one(target: PostTarget) -> PostTarget:
+            try:
+                return await publish_dispatcher.publish_target(db, target)
+            except Exception as exc:  # noqa: BLE001
+                target.status = "failed"
+                target.error_message = str(exc)
+                db.commit()
+                db.refresh(target)
+                return target
+
+        results = await asyncio.gather(*(_publish_one(target) for target in targets))
+        post.status = "published" if all(t.status == "published" for t in results) else "partially_failed"
+        db.commit()
+
+    background_tasks.add_task(_publish_all)
+
+    return list(targets)
