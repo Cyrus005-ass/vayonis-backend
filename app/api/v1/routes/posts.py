@@ -1,9 +1,10 @@
 import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.deps import get_current_user
 from app.models.media_asset import MediaAsset
 from app.models.post import Post
@@ -252,20 +253,47 @@ async def publish_post(
     for target in targets:
         db.refresh(target)
 
-    async def _publish_all() -> None:
-        async def _publish_one(target: PostTarget) -> PostTarget:
-            try:
-                return await publish_dispatcher.publish_target(db, target)
-            except Exception as exc:  # noqa: BLE001
-                target.status = "failed"
-                target.error_message = str(exc)
-                db.commit()
-                db.refresh(target)
-                return target
+    target_ids = [target.id for target in targets]
+    post_id_value = post.id
 
-        results = await asyncio.gather(*(_publish_one(target) for target in targets))
-        post.status = "published" if all(t.status == "published" for t in results) else "partially_failed"
-        db.commit()
+    async def _publish_all() -> None:
+        # IMPORTANT: the `db` session injected into this request is closed
+        # by FastAPI as soon as the HTTP response is sent - background
+        # tasks run AFTER that point. Reusing it here silently no-ops every
+        # commit, which is exactly why targets used to get stuck on
+        # "processing" forever with no visible error. A background task
+        # that touches the database must open its own session.
+        task_db = SessionLocal()
+        try:
+            task_targets = (
+                task_db.query(PostTarget).filter(PostTarget.id.in_(target_ids)).all()
+            )
+
+            async def _publish_one(target: PostTarget) -> PostTarget:
+                try:
+                    return await publish_dispatcher.publish_target(task_db, target)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[publish_post background task] target {target.id} failed: {exc}")
+                    target.status = "failed"
+                    target.error_message = str(exc)
+                    task_db.commit()
+                    task_db.refresh(target)
+                    return target
+
+            results = await asyncio.gather(*(_publish_one(target) for target in task_targets))
+
+            task_post = task_db.query(Post).filter(Post.id == post_id_value).first()
+            if task_post is not None:
+                task_post.status = (
+                    "published" if all(t.status == "published" for t in results) else "partially_failed"
+                )
+                task_db.commit()
+        except Exception as exc:  # noqa: BLE001
+            # Catch-all so a bug here never leaves targets silently stuck -
+            # at minimum this shows up in Render's logs.
+            print(f"[publish_post background task] unexpected failure: {exc}")
+        finally:
+            task_db.close()
 
     background_tasks.add_task(_publish_all)
 
