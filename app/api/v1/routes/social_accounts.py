@@ -9,7 +9,13 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.schemas.social_account import OAuthConnectResponse, SocialAccountResponse
-from app.services import instagram_oauth_service, linkedin_oauth_service, meta_oauth_service
+from app.services import (
+    instagram_oauth_service,
+    linkedin_oauth_service,
+    meta_oauth_service,
+    tiktok_oauth_service,
+    youtube_oauth_service,
+)
 
 router = APIRouter(prefix="/social-accounts", tags=["social-accounts"])
 
@@ -91,3 +97,47 @@ async def linkedin_callback(
     except linkedin_oauth_service.LinkedInOAuthError as exc:
         return _frontend_redirect("linkedin", error=str(exc))
     return _frontend_redirect("linkedin")
+
+
+@router.get("/tiktok/connect", response_model=OAuthConnectResponse)
+def tiktok_connect(current_user: User = Depends(get_current_user)) -> OAuthConnectResponse:
+    try:
+        url = tiktok_oauth_service.build_connect_url(current_user)
+    except tiktok_oauth_service.TikTokOAuthError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    return OAuthConnectResponse(authorization_url=url)
+
+
+@router.get("/tiktok/callback")
+async def tiktok_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    try:
+        await tiktok_oauth_service.handle_callback(db, code, state)
+    except tiktok_oauth_service.TikTokOAuthError as exc:
+        return _frontend_redirect("tiktok", error=str(exc))
+    return _frontend_redirect("tiktok")
+
+
+@router.get("/youtube/connect", response_model=OAuthConnectResponse)
+def youtube_connect(current_user: User = Depends(get_current_user)) -> OAuthConnectResponse:
+    try:
+        url = youtube_oauth_service.build_connect_url(current_user)
+    except youtube_oauth_service.YouTubeOAuthError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    return OAuthConnectResponse(authorization_url=url)
+
+
+@router.get("/youtube/callback")
+async def youtube_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    try:
+        await youtube_oauth_service.handle_callback(db, code, state)
+    except youtube_oauth_service.YouTubeOAuthError as exc:
+        return _frontend_redirect("youtube", error=str(exc))
+    return _frontend_redirect("youtube")

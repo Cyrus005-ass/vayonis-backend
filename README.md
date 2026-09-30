@@ -1,6 +1,6 @@
 # Vayonis Backend V1
 
-API FastAPI pour la publication multi-réseaux (Instagram, Facebook, LinkedIn) avec OAuth, stockage S3 et tâches asynchrones via Celery.
+API FastAPI pour la publication multi-réseaux (Instagram, Facebook, LinkedIn) avec OAuth, stockage S3 et tâches asynchrones via Celery. Les squelettes TikTok et YouTube sont présents mais désactivés par défaut.
 
 ## Stack technique
 
@@ -50,6 +50,8 @@ Services disponibles :
 | `META_APP_ID` / `META_APP_SECRET` / `META_REDIRECT_URI` | Facebook & Instagram (Meta Graph API v21.0) |
 | `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` / `INSTAGRAM_REDIRECT_URI` | Instagram standalone |
 | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` / `LINKEDIN_REDIRECT_URI` | LinkedIn |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` / `TIKTOK_REDIRECT_URI` | TikTok (squelette) |
+| `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` / `YOUTUBE_REDIRECT_URI` | YouTube (squelette) |
 
 ### Stockage S3
 
@@ -79,7 +81,7 @@ app/
     routes/
       auth.py              # Register, login, Google OAuth
       users.py             # Profil utilisateur
-      social_accounts.py   # Connexion OAuth (Meta, Instagram, LinkedIn)
+      social_accounts.py   # Connexion OAuth (Meta, Instagram, LinkedIn, TikTok, YouTube)
       posts.py             # CRUD posts, upload media, cibles, publication
   core/
     config.py             # Paramètres (pydantic-settings)
@@ -104,11 +106,15 @@ app/
     meta_oauth_service.py         # OAuth Meta (Facebook Pages + Instagram Business)
     instagram_oauth_service.py    # OAuth Instagram standalone
     linkedin_oauth_service.py     # OAuth LinkedIn
+    tiktok_oauth_service.py       # OAuth TikTok (squelette)
+    youtube_oauth_service.py      # OAuth YouTube (squelette)
     storage_service.py            # Upload S3, presigned URLs, suppression
     publish_dispatcher.py         # Routage vers le bon service de publication
     meta_publish_service.py       # Publication Facebook Page
     instagram_publish_service.py  # Publication Instagram (image, vidéo, carousel)
     linkedin_publish_service.py   # Publication LinkedIn (UGC Posts + asset upload)
+    tiktok_publish_service.py    # Publication TikTok (squelette)
+    youtube_publish_service.py   # Publication YouTube (squelette)
   workers/
     celery_app.py         # Configuration Celery + Beat schedule
     tasks.py              # refresh_expiring_tokens, publish_scheduled_post
@@ -154,6 +160,10 @@ Contrainte d'unicité : `(user_id, platform, external_id)` sur `social_accounts`
 | `GET` | `/api/v1/social-accounts/instagram/callback` | Callback OAuth Instagram |
 | `GET` | `/api/v1/social-accounts/linkedin/connect` | URL de connexion LinkedIn |
 | `GET` | `/api/v1/social-accounts/linkedin/callback` | Callback OAuth LinkedIn |
+| `GET` | `/api/v1/social-accounts/tiktok/connect` | URL de connexion TikTok (503 tant que désactivé) |
+| `GET` | `/api/v1/social-accounts/tiktok/callback` | Callback OAuth TikTok (squelette) |
+| `GET` | `/api/v1/social-accounts/youtube/connect` | URL de connexion YouTube (503 tant que désactivé) |
+| `GET` | `/api/v1/social-accounts/youtube/callback` | Callback OAuth YouTube (squelette) |
 
 ### Posts
 
@@ -203,6 +213,14 @@ Endpoints :
 
 - `GET /api/v1/social-accounts/linkedin/connect`
 - `GET /api/v1/social-accounts/linkedin/callback?code=...&state=...`
+
+### TikTok (squelette)
+
+Les endpoints de connexion et de callback sont présents, mais l'intégration est désactivée par défaut. Activez `ENABLE_TIKTOK`, renseignez `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` et `TIKTOK_REDIRECT_URI`, puis implémentez le callback et la publication.
+
+### YouTube (squelette)
+
+Les endpoints de connexion et de callback sont présents, mais l'intégration est désactivée par défaut. Activez `ENABLE_YOUTUBE`, renseignez `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` et `YOUTUBE_REDIRECT_URI`, puis implémentez le callback et la publication.
 
 ## Publication
 
@@ -293,6 +311,6 @@ python scripts/test_http_smoke.py
 
 **Non encore implémenté / désactivé :**
 
-- TikTok, YouTube (flags `ENABLE_TIKTOK`, `ENABLE_YOUTUBE` à `false`).
+- TikTok et YouTube : squelettes présents (routes, OAuth, dispatch), désactivés par `ENABLE_TIKTOK=false` et `ENABLE_YOUTUBE=false` ; callbacks et publication restent à implémenter.
 - Analytics, billing, IA (flags dédiés à `false`).
 - Interface d'administration ou dashboard.

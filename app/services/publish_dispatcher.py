@@ -3,12 +3,20 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.models.post_target import PostTarget
-from app.services import instagram_publish_service, linkedin_publish_service, meta_publish_service
+from app.services import (
+    instagram_publish_service,
+    linkedin_publish_service,
+    meta_publish_service,
+    tiktok_publish_service,
+    youtube_publish_service,
+)
 
 _SERVICES = {
     "instagram": instagram_publish_service,
     "facebook": meta_publish_service,
     "linkedin": linkedin_publish_service,
+    "tiktok": tiktok_publish_service,
+    "youtube": youtube_publish_service,
 }
 
 

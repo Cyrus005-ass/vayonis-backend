@@ -8,7 +8,8 @@ from cryptography.fernet import Fernet
 os.environ["TOKEN_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
 os.environ["DATABASE_URL"] = "sqlite:///./test_http.db"
 os.environ["LINKEDIN_CLIENT_ID"] = "test-client-id"
-os.environ["LINKEDIN_CLIENT_SECRET"] = "test-client-secret"
+os.environ["ENABLE_TIKTOK"] = "false"
+os.environ["ENABLE_YOUTUBE"] = "false"
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -40,5 +41,12 @@ connect = client.get(
 assert connect.status_code == 200
 assert "linkedin.com" in connect.json()["authorization_url"]
 assert "w_member_social" in connect.json()["authorization_url"]
+
+for platform in ("tiktok", "youtube"):
+    disabled_connect = client.get(
+        f"/api/v1/social-accounts/{platform}/connect",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert disabled_connect.status_code == 503, disabled_connect.text
 
 print("HTTP smoke test: OK")
